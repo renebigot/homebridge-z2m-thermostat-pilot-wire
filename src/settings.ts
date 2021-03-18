@@ -1,9 +1,2 @@
-/**
- * This is the name of the platform that users will use to register the plugin in the Homebridge config.json
- */
-export const PLATFORM_NAME = "zigbee2mqtt-thermostat";
-
-/**
- * This must match the name of your plugin as defined the package.json
- */
+export const ACCESSORY_NAME = "z2m-thermostat";
 export const PLUGIN_NAME = "homebridge-z2m-thermostat";
