@@ -1,7 +1,7 @@
 {
-  "pluginAlias": "ExampleHomebridgePlugin",
-  "pluginType": "platform",
-  "singular": true,
+  "pluginAlias": "z2m-thermostat",
+  "pluginType": "accessory",
+  "singular": false,
   "schema": {
     "type": "object",
     "properties": {
@@ -9,7 +9,38 @@
         "title": "Name",
         "type": "string",
         "required": true,
-        "default": "Example Dynamic Platform"
+        "placeholder": "Accessory name"
+      },
+      "mqtt": {
+        "title": "Mqtt",
+        "type": "object",
+        "properties": {
+          "url": {
+            "title": "URL",
+            "type": "string",
+            "placeholder": "mqtt://192.168.40.20:1883",
+            "required": true
+          },
+          "base_topic": {
+            "title": "Base topic",
+            "type": "string",
+            "required": false,
+            "default": "zigbee2mqtt",
+            "placeholder": "zigbee2mqtt"
+          }
+        }
+      },
+      "switch": {
+        "title": "Switch",
+        "type": "string",
+        "required": true,
+        "placeholder": "0x1234567890abcdef"
+      },
+      "temperature": {
+        "title": "Temperature sensor",
+        "type": "string",
+        "required": true,
+        "placeholder": "0x1234567890abcdef"
       }
     }
   }
