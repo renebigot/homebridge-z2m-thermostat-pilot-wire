@@ -10,8 +10,6 @@ import {
 
 import mqtt, { MqttClient } from "mqtt";
 
-const baseTopic = "zigbee2mqtt";
-
 interface Temperature {
   battery: number;
   humidity: number;
@@ -60,15 +58,10 @@ class Thermostat implements AccessoryPlugin {
       log.error("MQTT error", error);
     });
 
-    const subscription = `${baseTopic}/${config.temperature}`;
-
     this.mqttClient.on("connect", () => {
-      this.mqttClient.subscribe(subscription);
+      this.mqttClient.subscribe(this.topic(config.temperature));
 
       this.mqttClient.on("message", (topic, msg) => {
-        if (topic !== subscription) {
-          return;
-        }
         const message = JSON.parse(msg.toString()) as Temperature;
         this.state.humidity = message.humidity;
         this.state.temperature = message.temperature;
@@ -121,6 +114,10 @@ class Thermostat implements AccessoryPlugin {
     log.info("Switch finished initializing!");
   }
 
+  topic(value: string) {
+    return `${this.config.mqtt.base_topic || "zigbee2mqtt"}/${value}`;
+  }
+
   toSwitchValue(value: CharacteristicValue) {
     return value === 0 ? "OFF" : "ON";
   }
@@ -144,7 +141,7 @@ class Thermostat implements AccessoryPlugin {
     }
 
     this.mqttClient.publish(
-      `${baseTopic}/${this.config.switch}/set`,
+      this.topic(this.config.switch) + "/set",
       JSON.stringify({
         state: this.toSwitchValue(this.state.currentHeaterState),
       }),
