@@ -30,8 +30,8 @@
           }
         }
       },
-      "switch": {
-        "title": "Switch",
+      "outlet": {
+        "title": "Outlet",
         "type": "string",
         "required": true,
         "placeholder": "0x1234567890abcdef"

@@ -111,14 +111,14 @@ class Thermostat implements AccessoryPlugin {
       )
       .setCharacteristic(this.characteristic.Model, "Custom Model");
 
-    log.info("Switch finished initializing!");
+    log.info("Thermostat finished initializing!");
   }
 
   topic(value: string) {
     return `${this.config.mqtt.base_topic || "zigbee2mqtt"}/${value}`;
   }
 
-  toSwitchValue(value: CharacteristicValue) {
+  toOutletValue(value: CharacteristicValue) {
     return value === 0 ? "OFF" : "ON";
   }
 
@@ -147,8 +147,8 @@ class Thermostat implements AccessoryPlugin {
   }
 
   set(state): Promise<number> {
-    const newState = this.toSwitchValue(state);
-    const topic = this.topic(this.config.switch) + "/set";
+    const newState = this.toOutletValue(state);
+    const topic = this.topic(this.config.outlet) + "/set";
     return new Promise((resolve, reject) => {
       this.mqttClient.publish(
         topic,
