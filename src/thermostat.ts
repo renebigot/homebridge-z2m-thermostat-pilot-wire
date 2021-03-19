@@ -122,7 +122,7 @@ class Thermostat implements AccessoryPlugin {
     return value === 0 ? "OFF" : "ON";
   }
 
-  update(): void {
+  async update() {
     this.log.debug("Updating", this.state);
 
     this.service
@@ -140,19 +140,28 @@ class Thermostat implements AccessoryPlugin {
       this.state.currentHeaterState = 0;
     }
 
-    this.mqttClient.publish(
-      this.topic(this.config.switch) + "/set",
-      JSON.stringify({
-        state: this.toSwitchValue(this.state.currentHeaterState),
-      }),
-      (e) => {
-        if (!e) {
-          this.service
-            .getCharacteristic(this.characteristic.CurrentHeatingCoolingState)
-            .updateValue(this.state.currentHeaterState);
+    const newState = await this.set(this.state.currentHeaterState);
+    this.service
+      .getCharacteristic(this.characteristic.CurrentHeatingCoolingState)
+      .updateValue(newState);
+  }
+
+  set(state): Promise<number> {
+    const newState = this.toSwitchValue(state);
+    const topic = this.topic(this.config.switch) + "/set";
+    return new Promise((resolve, reject) => {
+      this.mqttClient.publish(
+        topic,
+        JSON.stringify({ state: newState }),
+        (error) => {
+          if (error) {
+            return reject(error);
+          }
+
+          return resolve(state);
         }
-      }
-    );
+      );
+    });
   }
 
   /*
