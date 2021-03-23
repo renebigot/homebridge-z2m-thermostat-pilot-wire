@@ -132,18 +132,20 @@ class Thermostat implements AccessoryPlugin {
       .getCharacteristic(this.characteristic.CurrentRelativeHumidity)
       .updateValue(this.state.humidity);
 
+    let newHeaterState = this.state.currentHeaterState;
     if (this.state.targetHeatingState) {
-      const newHeaterState =
-        this.state.temperature > this.state.targetTemperature;
-      this.state.currentHeaterState = newHeaterState ? 0 : 1;
-    } else {
-      this.state.currentHeaterState = 0;
+      newHeaterState =
+        this.state.temperature > this.state.targetTemperature ? 0 : 1;
     }
 
-    const newState = await this.set(this.state.currentHeaterState);
     this.service
       .getCharacteristic(this.characteristic.CurrentHeatingCoolingState)
-      .updateValue(newState);
+      .updateValue(newHeaterState);
+
+    if (this.state.currentHeaterState !== newHeaterState) {
+      this.state.currentHeaterState = newHeaterState;
+      await this.set(this.state.currentHeaterState);
+    }
   }
 
   set(state): Promise<number> {
