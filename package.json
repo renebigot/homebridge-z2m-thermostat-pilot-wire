@@ -1,7 +1,7 @@
 {
   "name": "homebridge-z2m-thermostat",
   "displayName": "z2m-thermostat",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Combine a temperature sensor and a control outlet to create a thermostat",
   "license": "Apache-2.0",
   "repository": {
