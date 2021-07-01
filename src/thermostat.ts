@@ -7,7 +7,6 @@ import {
   Logging,
   Service,
 } from "homebridge";
-
 import mqtt, { MqttClient } from "mqtt";
 
 interface Temperature {
@@ -27,16 +26,12 @@ interface AccessoryState extends Pick<Temperature, "temperature" | "humidity"> {
 
 class Thermostat implements AccessoryPlugin {
   private readonly log: Logging;
-  private readonly name: string;
   private readonly config: AccessoryConfig;
-
   private readonly service: Service;
   private readonly informationService: Service;
-
-  private characteristic: typeof Characteristic;
-
   private readonly mqttClient: MqttClient;
 
+  private characteristic: typeof Characteristic;
   private state: AccessoryState = {
     temperature: 0,
     humidity: 0,
@@ -47,10 +42,8 @@ class Thermostat implements AccessoryPlugin {
 
   constructor(log: Logging, config: AccessoryConfig, api: API) {
     this.log = log;
-    this.name = config.name;
     this.config = config;
-
-    this.service = new api.hap.Service.Thermostat(this.name);
+    this.service = new api.hap.Service.Thermostat(config.name);
     this.characteristic = api.hap.Characteristic;
 
     this.mqttClient = mqtt.connect(config.mqtt.url);
@@ -60,14 +53,21 @@ class Thermostat implements AccessoryPlugin {
 
     this.mqttClient.on("connect", () => {
       this.mqttClient.subscribe(this.topic(config.temperature));
-
-      this.mqttClient.on("message", (topic, msg) => {
-        const message = JSON.parse(msg.toString()) as Temperature;
-        this.state.humidity = message.humidity;
-        this.state.temperature = message.temperature;
-        this.update();
-      });
     });
+
+    this.mqttClient.on("message", (topic, msg) => {
+      const message = JSON.parse(msg.toString());
+      const { humidity, temperature } = message as Temperature;
+      this.setState({ humidity, temperature });
+    });
+
+    this.service
+      .getCharacteristic(this.characteristic.CurrentTemperature)
+      .onGet(() => this.state.temperature);
+
+    this.service
+      .getCharacteristic(this.characteristic.CurrentRelativeHumidity)
+      .onGet(() => this.state.humidity);
 
     this.service
       .getCharacteristic(this.characteristic.CurrentHeatingCoolingState)
@@ -81,26 +81,12 @@ class Thermostat implements AccessoryPlugin {
         validValues: [0, 1],
       })
       .onGet(() => this.state.targetHeatingState)
-      .onSet((value) => {
-        this.state.targetHeatingState = value;
-        this.update();
-      });
-
-    this.service
-      .getCharacteristic(this.characteristic.CurrentTemperature)
-      .onGet(() => this.state.temperature);
+      .onSet((value) => this.setState({ targetHeatingState: value }));
 
     this.service
       .getCharacteristic(this.characteristic.TargetTemperature)
       .onGet(() => this.state.targetTemperature)
-      .onSet((value) => {
-        this.state.targetTemperature = value;
-        this.update();
-      });
-
-    this.service
-      .getCharacteristic(this.characteristic.CurrentRelativeHumidity)
-      .onGet(() => this.state.humidity);
+      .onSet((value) => this.setState({ targetTemperature: value }));
 
     this.service.getCharacteristic(this.characteristic.TemperatureDisplayUnits);
 
@@ -114,70 +100,64 @@ class Thermostat implements AccessoryPlugin {
     log.info("Thermostat finished initializing!");
   }
 
+  async setState(state: Partial<AccessoryState>) {
+    const oldState = { ...this.state };
+    const newState = { ...oldState, ...state };
+    const targetTemperatureReached =
+      newState.temperature > newState.targetTemperature;
+    if (newState.targetHeatingState === 0) {
+      newState.currentHeaterState = 0;
+    } else {
+      newState.currentHeaterState = targetTemperatureReached ? 0 : 1;
+    }
+
+    this.state = newState;
+    await this.update(newState, oldState);
+  }
+
+  async update(state: AccessoryState, oldState: AccessoryState) {
+    this.service
+      .getCharacteristic(this.characteristic.CurrentTemperature)
+      .updateValue(state.temperature);
+    this.service
+      .getCharacteristic(this.characteristic.CurrentRelativeHumidity)
+      .updateValue(state.humidity);
+    this.service
+      .getCharacteristic(this.characteristic.CurrentHeatingCoolingState)
+      .updateValue(state.currentHeaterState);
+
+    const outletState = this.outletState(state);
+    if (outletState !== this.outletState(oldState)) {
+      await this.updateOutletState(outletState);
+    }
+  }
+
   topic(value: string) {
     return `${this.config.mqtt.base_topic || "zigbee2mqtt"}/${value}`;
   }
 
-  toOutletValue(value: CharacteristicValue) {
-    return value === 0 ? "OFF" : "ON";
+  outletState({ targetHeatingState, currentHeaterState }: AccessoryState) {
+    return targetHeatingState === 0 || currentHeaterState === 0 ? 0 : 1;
   }
 
-  async update() {
-    this.log.debug("Updating", this.state);
-
-    this.service
-      .getCharacteristic(this.characteristic.CurrentTemperature)
-      .updateValue(this.state.temperature);
-    this.service
-      .getCharacteristic(this.characteristic.CurrentRelativeHumidity)
-      .updateValue(this.state.humidity);
-
-    let newHeaterState = this.state.currentHeaterState;
-    if (this.state.targetHeatingState) {
-      newHeaterState =
-        this.state.temperature > this.state.targetTemperature ? 0 : 1;
-    }
-
-    this.service
-      .getCharacteristic(this.characteristic.CurrentHeatingCoolingState)
-      .updateValue(newHeaterState);
-
-    if (this.state.currentHeaterState !== newHeaterState) {
-      this.state.currentHeaterState = newHeaterState;
-      await this.set(this.state.currentHeaterState);
-    }
-  }
-
-  set(state): Promise<number> {
-    const newState = this.toOutletValue(state);
+  updateOutletState(value: CharacteristicValue): Promise<CharacteristicValue> {
+    const state = value === 0 ? "OFF" : "ON";
     const topic = this.topic(this.config.outlet) + "/set";
     return new Promise((resolve, reject) => {
       this.mqttClient.publish(
         topic,
-        JSON.stringify({ state: newState }),
+        JSON.stringify({ state }),
+        { qos: 2 },
         (error) => {
           if (error) {
             return reject(error);
           }
-
-          return resolve(state);
+          return resolve(value);
         }
       );
     });
   }
 
-  /*
-   * This method is optional to implement. It is called when HomeKit ask to identify the accessory.
-   * Typical this only ever happens at the pairing process.
-   */
-  identify(): void {
-    this.log("Identify!");
-  }
-
-  /*
-   * This method is called directly after creation of this instance.
-   * It should return all services which should be added to the accessory.
-   */
   getServices(): Service[] {
     return [this.informationService, this.service];
   }
