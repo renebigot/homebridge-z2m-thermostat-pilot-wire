@@ -1,7 +1,7 @@
 {
   "name": "homebridge-z2m-thermostat-pilot-wire",
   "displayName": "z2m-thermostat-pilot-wire",
-  "version": "1.0.2",
+  "version": "2.0.0",
   "description": "Combine a temperature sensor and a control outlet to create a thermostat",
   "license": "Apache-2.0",
   "repository": {
