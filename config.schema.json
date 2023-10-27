@@ -1,5 +1,5 @@
 {
-  "pluginAlias": "z2m-thermostat",
+  "pluginAlias": "z2m-thermostat-pilot-wire",
   "pluginType": "accessory",
   "singular": false,
   "schema": {
@@ -15,20 +15,44 @@
         "title": "Mqtt",
         "type": "object",
         "properties": {
-          "url": {
-            "title": "URL",
+          "address": {
+            "title": "Server address",
             "type": "string",
-            "placeholder": "mqtt://192.168.40.20:1883",
+            "placeholder": "192.168.40.20",
             "required": true
           },
-          "base_topic": {
+          "port": {
+            "title": "Server port",
+            "type": "string",
+            "placeholder": "1883",
+            "required": true
+          },
+          "baseTopic": {
             "title": "Base topic",
             "type": "string",
             "required": false,
             "default": "zigbee2mqtt",
             "placeholder": "zigbee2mqtt"
+          },
+          "user": {
+            "title": "User",
+            "type": "string",
+            "placeholder": "admin",
+            "required": false
+          },
+          "password": {
+            "title": "Password",
+            "type": "string",
+            "placeholder": "•••••••••••••••••",
+            "required": false
           }
         }
+      },
+      "temperature": {
+        "title": "Temperature sensor",
+        "type": "string",
+        "required": true,
+        "placeholder": "0x1234567890abcdef"
       },
       "outlet": {
         "title": "Outlet",
@@ -36,11 +60,9 @@
         "required": true,
         "placeholder": "0x1234567890abcdef"
       },
-      "temperature": {
-        "title": "Temperature sensor",
-        "type": "string",
-        "required": true,
-        "placeholder": "0x1234567890abcdef"
+      "invertOnOff": {
+        "title": "Invert On/Off state",
+        "type": "boolean"
       }
     }
   }
