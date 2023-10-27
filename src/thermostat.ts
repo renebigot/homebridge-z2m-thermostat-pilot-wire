@@ -1,7 +1,7 @@
 import {
+  API,
   AccessoryConfig,
   AccessoryPlugin,
-  API,
   Characteristic,
   CharacteristicValue,
   Logging,
@@ -46,7 +46,18 @@ class Thermostat implements AccessoryPlugin {
     this.service = new api.hap.Service.Thermostat(config.name);
     this.characteristic = api.hap.Characteristic;
 
-    this.mqttClient = mqtt.connect(config.mqtt.url);
+    let url = "mqtt://";
+    if (config.mqtt.user) {
+      url += config.mqtt.user;
+      if (config.mqtt.password) {
+        url += `:${config.mqtt.password}`;
+      }
+      url += "@";
+    }
+    url += `${config.mqtt.address}:${config.mqtt.port}`;
+
+    this.mqttClient = mqtt.connect(url);
+
     this.mqttClient.on("error", (error) => {
       log.error("MQTT error", error);
     });
@@ -103,8 +114,7 @@ class Thermostat implements AccessoryPlugin {
   async setState(state: Partial<AccessoryState>) {
     const oldState = { ...this.state };
     const newState = { ...oldState, ...state };
-    const targetTemperatureReached =
-      newState.temperature > newState.targetTemperature;
+    const targetTemperatureReached = newState.temperature > (newState.targetTemperature as number);
     if (newState.targetHeatingState === 0) {
       newState.currentHeaterState = 0;
     } else {
@@ -133,7 +143,7 @@ class Thermostat implements AccessoryPlugin {
   }
 
   topic(value: string) {
-    return `${this.config.mqtt.base_topic || "zigbee2mqtt"}/${value}`;
+    return `${this.config.mqtt.baseTopic || "zigbee2mqtt"}/${value}`;
   }
 
   outletState({ targetHeatingState, currentHeaterState }: AccessoryState) {
@@ -141,7 +151,9 @@ class Thermostat implements AccessoryPlugin {
   }
 
   updateOutletState(value: CharacteristicValue): Promise<CharacteristicValue> {
-    const state = value === 0 ? "OFF" : "ON";
+    const _value = this.config.invertOnOff === false ? value === 1 : value === 0;
+    const state = _value ? "ON" : "OFF";
+
     const topic = this.topic(this.config.outlet) + "/set";
     return new Promise((resolve, reject) => {
       this.mqttClient.publish(
