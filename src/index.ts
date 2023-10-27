@@ -1,5 +1,4 @@
 import { API } from "homebridge";
-
 import { ACCESSORY_NAME } from "./settings";
 import Thermostat from "./thermostat";
 
