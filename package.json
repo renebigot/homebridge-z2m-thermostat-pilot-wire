@@ -1,15 +1,15 @@
 {
-  "name": "homebridge-z2m-thermostat",
-  "displayName": "z2m-thermostat",
+  "name": "homebridge-z2m-thermostat-pilot-wire",
+  "displayName": "z2m-thermostat-pilot-wire",
   "version": "1.0.2",
   "description": "Combine a temperature sensor and a control outlet to create a thermostat",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git://github.com/augustskare/homebridge-z2m-thermostat.git"
+    "url": "https://github.com/renebigot/homebridge-z2m-thermostat-pilot-wire.git"
   },
   "bugs": {
-    "url": "https://github.com/augustskare/homebridge-z2m-thermostat/issues"
+    "url": "https://github.com/renebigot/homebridge-z2m-thermostat-pilot-wire"
   },
   "engines": {
     "node": ">=10.17.0",
@@ -26,18 +26,17 @@
     "homebridge-plugin"
   ],
   "dependencies": {
-    "mqtt": "^4.2.8"
+    "@types/node": "^20.8.9",
+    "@typescript-eslint/eslint-plugin": "^6.9.0",
+    "@typescript-eslint/parser": "^6.9.0",
+    "eslint": "^8.52.0",
+    "homebridge": "^1.6.1",
+    "mqtt": "^5.1.3",
+    "nodemon": "^3.0.1",
+    "prettier": "^3.0.3",
+    "rimraf": "^5.0.5",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.2.2"
   },
-  "devDependencies": {
-    "@types/node": "^14.14.31",
-    "@typescript-eslint/eslint-plugin": "^4.16.1",
-    "@typescript-eslint/parser": "^4.16.1",
-    "eslint": "^7.21.0",
-    "homebridge": "^1.3.1",
-    "nodemon": "^2.0.7",
-    "prettier": "2.2.1",
-    "rimraf": "^3.0.2",
-    "ts-node": "^9.1.1",
-    "typescript": "^4.2.2"
-  }
+  "devDependencies": {}
 }
