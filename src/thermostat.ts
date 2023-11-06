@@ -7,7 +7,7 @@ import {
   Logging,
   Service,
 } from "homebridge";
-import mqtt, { MqttClient } from "mqtt";
+import { MqttClient, connect } from "mqtt";
 
 interface Temperature {
   battery: number;
@@ -18,10 +18,11 @@ interface Temperature {
   voltage: number;
 }
 
-interface AccessoryState extends Pick<Temperature, "temperature" | "humidity"> {
-  targetTemperature: CharacteristicValue;
-  currentHeaterState: CharacteristicValue;
-  targetHeatingState: CharacteristicValue;
+interface AccessoryState {
+  currentTemperature: number;
+  targetTemperature: number;
+  currentHeatingCoolingState: CharacteristicValue;
+  targetHeatingCoolingState: CharacteristicValue;
 }
 
 class Thermostat implements AccessoryPlugin {
@@ -33,11 +34,10 @@ class Thermostat implements AccessoryPlugin {
 
   private characteristic: typeof Characteristic;
   private state: AccessoryState = {
-    temperature: 0,
-    humidity: 0,
+    currentTemperature: 0,
     targetTemperature: 20,
-    currentHeaterState: 0,
-    targetHeatingState: 0,
+    currentHeatingCoolingState: 0,
+    targetHeatingCoolingState: 0,
   };
 
   constructor(log: Logging, config: AccessoryConfig, api: API) {
@@ -56,33 +56,37 @@ class Thermostat implements AccessoryPlugin {
     }
     url += `${config.mqtt.address}:${config.mqtt.port}`;
 
-    this.mqttClient = mqtt.connect(url);
+    log.info(`Connecting to ${url.replace(/\/\/.*?:.*?@/, "//")}`);
+    this.mqttClient = connect(url);
 
     this.mqttClient.on("error", (error) => {
       log.error("MQTT error", error);
     });
 
     this.mqttClient.on("connect", () => {
-      this.mqttClient.subscribe(this.topic(config.temperature));
+      const topic = this.topic(config.temperature);
+      log.info(`Subscribe to: ${topic}`);
+      this.mqttClient.subscribe(topic);
     });
 
     this.mqttClient.on("message", (topic, msg) => {
       const message = JSON.parse(msg.toString());
-      const { humidity, temperature } = message as Temperature;
-      this.setState({ humidity, temperature });
+      const { temperature } = message as Temperature;
+      this.state.currentTemperature = temperature;
+
+      this.log.info(`Room temperature is "${temperature}°C"`);
+      this.service.setCharacteristic(this.characteristic.CurrentTemperature, this.state.currentTemperature);
+      // Update HeatingCoolingState based on current temperature and target
+      this.updateHeatingCoolingState();
     });
 
     this.service
       .getCharacteristic(this.characteristic.CurrentTemperature)
-      .onGet(() => this.state.temperature);
-
-    this.service
-      .getCharacteristic(this.characteristic.CurrentRelativeHumidity)
-      .onGet(() => this.state.humidity);
+      .onGet(() => this.state.currentTemperature);
 
     this.service
       .getCharacteristic(this.characteristic.CurrentHeatingCoolingState)
-      .onGet(() => this.state.currentHeaterState);
+      .onGet(() => this.state.currentHeatingCoolingState);
 
     this.service
       .getCharacteristic(this.characteristic.TargetHeatingCoolingState)
@@ -91,13 +95,29 @@ class Thermostat implements AccessoryPlugin {
         maxValue: 1,
         validValues: [0, 1],
       })
-      .onGet(() => this.state.targetHeatingState)
-      .onSet((value) => this.setState({ targetHeatingState: value }));
+      .onGet(() => this.state.targetHeatingCoolingState)
+      .onSet((value) => {
+        this.log.info(`Setting TargetHeatingCoolingState to "${value}"`);
+        this.state.targetHeatingCoolingState = value;
+
+        if (value === this.characteristic.TargetHeatingCoolingState.OFF) {
+          this.updateOutletState(value);
+        }
+      });
 
     this.service
       .getCharacteristic(this.characteristic.TargetTemperature)
+      .setProps({
+        minValue: 10,
+        maxValue: 30,
+        minStep: 0.5,
+      })
       .onGet(() => this.state.targetTemperature)
-      .onSet((value) => this.setState({ targetTemperature: value }));
+      .onSet((value) => {
+        this.log.info(`Setting TargetTemperature to "${value}°C"`);
+        this.state.targetTemperature = value as number;
+        this.updateHeatingCoolingState();
+      });
 
     this.service.getCharacteristic(this.characteristic.TemperatureDisplayUnits);
 
@@ -111,43 +131,31 @@ class Thermostat implements AccessoryPlugin {
     log.info("Thermostat finished initializing!");
   }
 
-  async setState(state: Partial<AccessoryState>) {
-    const oldState = { ...this.state };
-    const newState = { ...oldState, ...state };
-    const targetTemperatureReached = newState.temperature > (newState.targetTemperature as number);
-    if (newState.targetHeatingState === 0) {
-      newState.currentHeaterState = 0;
-    } else {
-      newState.currentHeaterState = targetTemperatureReached ? 0 : 1;
+  async updateHeatingCoolingState() {
+    if (this.state.targetHeatingCoolingState === this.characteristic.TargetHeatingCoolingState.OFF) {
+      this.log.info("Operation cancelled : TargetHeatingCoolingState is \"OFF\"");
+      return;
     }
 
-    this.state = newState;
-    await this.update(newState, oldState);
-  }
-
-  async update(state: AccessoryState, oldState: AccessoryState) {
-    this.service
-      .getCharacteristic(this.characteristic.CurrentTemperature)
-      .updateValue(state.temperature);
-    this.service
-      .getCharacteristic(this.characteristic.CurrentRelativeHumidity)
-      .updateValue(state.humidity);
-    this.service
-      .getCharacteristic(this.characteristic.CurrentHeatingCoolingState)
-      .updateValue(state.currentHeaterState);
-
-    const outletState = this.outletState(state);
-    if (outletState !== this.outletState(oldState)) {
-      await this.updateOutletState(outletState);
+    if (this.state.currentTemperature >= this.state.targetTemperature + 0.5) {
+      if (this.state.currentHeatingCoolingState !== this.characteristic.CurrentHeatingCoolingState.OFF) {
+        this.log.info("Setting CurrentHeatingCoolingState to \"OFF\"");
+        this.state.currentHeatingCoolingState = this.characteristic.CurrentHeatingCoolingState.OFF;
+        this.updateOutletState(this.characteristic.CurrentHeatingCoolingState.OFF);
+      }
+    } else if (this.state.currentTemperature < this.state.targetTemperature - 0.5) {
+      if (this.state.currentHeatingCoolingState !== this.characteristic.CurrentHeatingCoolingState.HEAT) {
+        this.log.info("Setting CurrentHeatingCoolingState to \"HEAT\"");
+        this.state.currentHeatingCoolingState = this.characteristic.CurrentHeatingCoolingState.HEAT;
+        this.updateOutletState(this.characteristic.CurrentHeatingCoolingState.HEAT);
+      }
     }
+
+    this.service.setCharacteristic(this.characteristic.CurrentHeatingCoolingState, this.state.currentHeatingCoolingState);
   }
 
   topic(value: string) {
     return `${this.config.mqtt.baseTopic || "zigbee2mqtt"}/${value}`;
-  }
-
-  outletState({ targetHeatingState, currentHeaterState }: AccessoryState) {
-    return targetHeatingState === 0 || currentHeaterState === 0 ? 0 : 1;
   }
 
   updateOutletState(value: CharacteristicValue): Promise<CharacteristicValue> {
@@ -155,6 +163,8 @@ class Thermostat implements AccessoryPlugin {
     const state = _value ? "ON" : "OFF";
 
     const topic = this.topic(this.config.outlet) + "/set";
+    this.log.info(`Sending "${state}" to topic "${topic}"`);
+
     return new Promise((resolve, reject) => {
       this.mqttClient.publish(
         topic,
